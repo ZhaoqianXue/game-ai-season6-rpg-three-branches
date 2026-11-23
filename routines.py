@@ -215,6 +215,22 @@ def greet(observation: Mapping[str, object], memory: dict[str, object], goal: ob
     return action.stand(heading)
 
 
+def talk(observation, memory, goal):
+    """Turn toward a listener and stand for the duration of the conversation pause."""
+    listener = people.find(observation, goal)
+    if listener is None:
+        return action.stand(me.heading(observation))
+    return action.stand(geometry.heading_to(me.position(observation), listener["position"]))
+
+
+def guide(observation, memory, goal):
+    """Walk to the workplace; wait if the visitor is still in earshot but lagging."""
+    listener = people.find(observation, "player_0")
+    if listener is not None and geometry.distance(me.position(observation), listener["position"]) > 4:
+        return talk(observation, memory, "player_0")
+    return go_to(observation, memory, goal)
+
+
 def follow(observation: Mapping[str, object], memory: dict[str, object], goal: object):
     """Stay about ``COMFORT_DISTANCE`` metres from a character.
 

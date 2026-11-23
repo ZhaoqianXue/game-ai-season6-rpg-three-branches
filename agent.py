@@ -33,7 +33,7 @@ from collections.abc import Mapping
 from typing import NamedTuple, cast
 
 import dialogue
-from conversations import GroundedDialogue, PERSONAS
+from conversations import PERSONAS, VisitorDialogue
 import routines
 import routing
 from sandbox.observation_types import ThreeBranchesAction, ThreeBranchesObservation
@@ -72,6 +72,10 @@ RESIDENTS = (
 # reactions to try. A reaction lasts REACTION_TICKS ticks before the resident goes back to its day.
 VISITOR_REACTION = "greet"
 REACTION_TICKS = 40
+CHAT_PAUSE_TICKS = 28
+MAX_CHAT_TICKS_PER_VISIT = 64
+TOUR_TICKS = 100
+VISITOR = "player_0"
 
 # The action number of the "use" expression, for noticing when a use did not work.
 USE = action.stand(0.0, "use")["action"]
@@ -118,7 +122,7 @@ class Agent:
         }
         self.memory["components"] = routing.components(cast(dict, self.memory["graph"]))
         self._update_plan(observation)
-        self.dialogue = GroundedDialogue(PERSONAS[slot])
+        self.dialogue = VisitorDialogue(PERSONAS[slot])
         self.dialogue.observe(observation)
 
     def act(self, observation: ThreeBranchesObservation) -> ThreeBranchesAction:
@@ -126,6 +130,9 @@ class Agent:
         memory = self.memory
         self.dialogue.observe(observation)
         self._find_free_work_prop(observation)
+        if isinstance(self.dialogue, VisitorDialogue):
+            self.dialogue.workplace_available = memory["work_prop"] is not None
+            self._update_encounter(observation)
 
         # A resident reacts to the visitor once per visit, for REACTION_TICKS ticks, then goes back
         # to its day even if the visitor stays. When the visitor leaves hearing range the visit is
@@ -136,8 +143,15 @@ class Agent:
             memory["visitor_handled"] = True
 
         self._update_plan(observation)
-        descriptions = {"tend": "working", "go_to": "walking", "gather_at": "meeting neighbors", "greet": "greeting the visitor", "sleep_at": "going home to sleep"}
-        self.dialogue.plan = f"{descriptions.get(str(memory['routine']), str(memory['routine']))} at {memory['goal']}"
+        descriptions = {
+            "tend": "working", "go_to": "walking", "gather_at": "meeting neighbors",
+            "greet": "greeting the visitor", "sleep_at": "going home to sleep",
+            "talk": "speaking with the visitor", "guide": "showing the visitor my workplace",
+        }
+        activity = descriptions.get(str(memory["routine"]), str(memory["routine"]))
+        if memory["goal"] not in (VISITOR, None) and memory["routine"] != "guide":
+            activity += " at " + str(memory["goal"]).replace("_", " ")
+        self.dialogue.plan = activity
         self._small_talk(observation)
 
         # Find the routine function in routines.py by its name and run it.
@@ -154,12 +168,68 @@ class Agent:
 
     def chat(self, inbox: list[dict[str, object]]) -> list[dict[str, str | None]]:
         """Read the messages heard this tick, and return this tick's lines."""
+        observation = self.dialogue.latest
+        if isinstance(self.dialogue, VisitorDialogue) and observation is not None:
+            inbox = self._conversation_inbox(observation, inbox)
         self.dialogue.receive(inbox)
         lines = self.dialogue.messages()
-        if isinstance(self.dialogue, GroundedDialogue) and self.dialogue.show_work:
-            self.memory["guide_until"] = day.tick(self.dialogue.latest) + 100
-            self.dialogue.show_work = False
+        if isinstance(self.dialogue, VisitorDialogue) and observation is not None:
+            if self.dialogue.defer_tour:
+                self.memory["tour_offer"] = True
+                self.memory["visitor_left_after_offer"] = False
+                self.dialogue.defer_tour = False
+            if self.dialogue.show_work:
+                self._begin_tour(day.tick(observation))
+                self.dialogue.show_work = False
         return lines
+
+    def _conversation_inbox(self, observation, inbox):
+        guest = nearby_visitor(observation)
+        filtered = []
+        for message in inbox:
+            if message.get("from") == VISITOR:
+                # Direct requests still work when the visitor wants someone farther away.
+                if guest is None or (
+                    message.get("to") is None and not closest_speaker(observation, guest)
+                ):
+                    continue
+                if str(message.get("text", "")).strip() and day.phase(observation) != "night":
+                    tick = day.tick(observation)
+                    started = cast(int, self.memory.setdefault("dialogue_started", tick))
+                    self.memory["chat_until"] = min(tick + CHAT_PAUSE_TICKS,
+                                                    started + MAX_CHAT_TICKS_PER_VISIT)
+            filtered.append(message)
+        return filtered
+
+    def _begin_tour(self, tick):
+        self.memory.update(guide_until=tick + TOUR_TICKS, visitor_handled=True)
+        self.memory.pop("tour_offer", None)
+        self.memory.pop("visitor_left_after_offer", None)
+
+    def _update_encounter(self, observation):
+        memory = self.memory
+        phase = day.phase(observation)
+        guest = nearby_visitor(observation)
+        tick = day.tick(observation)
+        if phase == "night":
+            for key in ("guide_until", "chat_until", "tour_offer", "visitor_left_after_offer"):
+                memory.pop(key, None)
+            return
+        if guest is None:
+            for key in ("guide_until", "chat_until", "dialogue_started"):
+                memory.pop(key, None)
+            if memory.get("tour_offer"):
+                memory["visitor_left_after_offer"] = True
+            return
+        if (phase == "evening" and memory.get("tour_offer")
+                and memory.get("visitor_left_after_offer") and memory["work_prop"] is not None
+                and self.dialogue.say(VISITOR, "I promised to show you where I work. Follow me.")):
+            self._begin_tour(tick)
+        if tick < cast(int, memory.get("guide_until", -1)):
+            work = props.usable(observation)
+            if work is not None and work["id"] == memory["work_prop"]:
+                if self.dialogue.say(VISITOR, "Here we are. This is where I work."):
+                    memory.pop("guide_until", None)
 
     def _update_plan(self, observation: Mapping[str, object]) -> None:
         """Ask ``assign`` what to do now, and start a new plan whenever the answer changes."""
@@ -224,8 +294,12 @@ def assign(observation: Mapping[str, object], memory: dict[str, object]) -> tupl
     if phase == "night":
         return "sleep_at", memory["home"]
 
-    if cast(int, memory.get("guide_until", -1)) > day.tick(observation) and visitor_nearby(observation):
-        return "go_to", work_prop
+    if visitor_nearby(observation):
+        tick = day.tick(observation)
+        if cast(int, memory.get("guide_until", -1)) > tick:
+            return "guide", work_prop
+        if cast(int, memory.get("chat_until", -1)) > tick:
+            return "talk", VISITOR
 
     # The visitor is within hearing range and this resident has not reacted yet.
     if visitor_nearby(observation) and not memory["visitor_handled"]:
@@ -244,7 +318,23 @@ def assign(observation: Mapping[str, object], memory: dict[str, object]) -> tupl
 
 def visitor_nearby(observation: Mapping[str, object]) -> bool:
     """Return whether the visitor is within hearing range, with no wall in between."""
-    return any(people.is_visitor(str(person["id"])) for person in people.nearby(observation))
+    return nearby_visitor(observation) is not None
+
+
+def nearby_visitor(observation: Mapping[str, object]):
+    return next((person for person in people.nearby(observation) if person["id"] == VISITOR), None)
+
+
+def closest_speaker(observation, visitor):
+    """Prefer the nearest known resident for a broadcast, breaking ties by stable ID."""
+    position = visitor["position"]
+    rank = (geometry.distance(me.position(observation), position), me.player_id(observation))
+    return not any(
+        people.is_npc(str(person["id"]))
+        and (geometry.distance(person["position"], position), person["id"]) < rank
+        and layout.line_of_sight(observation, person["position"], position)
+        for person in people.nearby(observation)
+    )
 
 
 def _props_by_distance(observation: Mapping[str, object], kind: str, building_id: str) -> list[str]:

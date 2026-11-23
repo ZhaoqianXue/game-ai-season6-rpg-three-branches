@@ -1,52 +1,36 @@
-# Season 5 — RPG: The Conversation
+# Season 6 — RPG: The Living Village
 
 Zhaoqian Xue / purpleman / GitHub @ZhaoqianXue
 
 ## Design goal
 
-Visitors should learn who the villagers are, why they do their jobs, and how their words match their activities. They can ask about visible props or request a daytime walk toward a workplace; distant and private facts remain unverified.
+A visitor should have time to finish a conversation. If a villager offers a workplace tour during a midday break, the visitor should be able to leave, come back in the evening, and see that same villager remember the offer.
 
-Rating question (1–5): How well did the villagers' replies and workplace tours match what they could see and what they were doing?
+**Rating question (1–5):** How well do villagers pause for conversation and follow through on a workplace tour when you return after lunch? To try the tour, ask a villager “Could you show me where you work?” during midday, leave hearing range, and return in the evening.
 
-## Characters and knowledge
+## Changes after Season 5
 
-Adapted from the official [Neighbor example](https://github.com/vox-deorum/game-agent-template/tree/examples/three_branches/neighbor). `PERSONAS` and `STORIES` in `conversations.py` give the ten residents authored identities: Mira tends the pump for the gardeners, Rowan keeps notices, Tess repairs, Ash tends the hearth, Bell minds the bell, three traders have different attitudes, and Fern/Reed garden. These backgrounds are design choices, not hidden-state observations.
+Season 5 averaged 3.8/5 from four peers. Reviewers could ask about props and jobs, but reported villagers walking off mid-conversation, multiple replies to one question, and player IDs breaking immersion. A resident now faces the visitor and pauses for 28 ticks after a question, with a 64-tick cap per visit. To answer a broadcast, it compares its distance with residents it currently knows can hear the visitor. A direct message can reach a different resident. Walls and limited awareness mean the local choice does not guarantee a single reply in every crowd. Replies name visible characters instead of printing their IDs.
 
-Each resident knows its own selected routine and workplace. Current prop states come only from `props.seen()`: knowing a lantern's location does not establish whether it is lit. A changed visible state replaces the old answer; an unseen prop remains unverified. Visitor claims do not change facts, and residents cannot read one another's private plans.
+At midday, a workplace request records a private offer. It can start a tour in the evening after the visitor has left hearing range and returned. The resident waits when its guest falls behind in earshot. It reports arrival only when it can interact with the workplace. If the guest leaves during the walk or the tour runs out of time, regular work resumes. At night, the resident goes home and clears the offer. Another resident does not inherit it.
 
-## Conversation and behavior
-
-The small LLM tier classifies free-form questions into five intents: work, routine, neighbors, help, or unknown. Code validates that label and renders an answer from current observations and authored knowledge. Unchecked model prose is never spoken. Greetings, exact prop questions, and workplace requests use scripts; long conversation history and pronoun-dependent follow-ups are not supported.
-
-`BackgroundLLM` allows movement to continue while a request runs. Each resident has one outstanding request, a 15-second timeout, and at most three calls per day: 30 for ten residents. The prompt requests one label; platform quota bounds token use. Neighbor chat needs no model. Failed access, asynchronous errors, exhausted allowance, or unusable results receive a scripted answer or uncertainty. A pending answer is dropped when the listener leaves or asks a newer question. Credentials are never committed; the platform supplies runtime access.
-
-The normal day retains work, midday meetings, brief visitor greetings, and night sleep. "Show me your workplace" temporarily selects a walk for up to 100 ticks while the visitor stays nearby. Night takes priority and the resident refuses. The reply promises movement toward the workplace, not guaranteed arrival through a crowd. Navigation retains the prior connected-region checks, cached approaches, crowd penalties, and waypoint speed control.
-
-## Season 4 revision and reflection
-
-Season 4 received 3.6/5 from five peers despite 100 automated completion scores. Peers wanted more than repetitive greetings and job labels. This revision adds character motives, current-state questions, explicit knowledge limits, and a conversation-triggered workplace walk. The common schedule remains a limitation.
-
-An extra break schedule caused a prop-use regression and was removed. Porting navigation also exposed float32 rounding at the use boundary; the approach now checks a small geometric margin before interacting. Keeping reliable behavior mattered more than unverified variety.
+The Season 5 model is retained for broad questions. It selects one intent label, and the script writes the reply from current observations and authored character facts. It uses the small tier with at most three attempts per resident per day, a 15-second request timeout, and one request in flight. The offer, continuation, and known world facts use scripts, so they survive an unavailable model. This keeps timing and commitments predictable, at the cost of a narrower conversation than open-ended text generation.
 
 ## Verification
 
-Use Python 3.12 and the unchanged pinned requirements. `season.json` contains the downloaded ten-villager/day-night Season 5 settings.
+`season.json` uses the downloaded ten-villager, day/night settings. In Python 3.12, install the provided requirements and run:
 
 ```sh
 python -m sandbox test
-python -m sandbox eval --seeds 0 1 2
-python -m sandbox play --seed 1
+python -m sandbox eval --seeds 17 31 53
+python visitor_probe.py
 ```
 
-- Final checks: 126 passed in 63.93 seconds, with seven supplied Gymnasium casting warnings; `git diff --check` passed. Protected environment files and supplied tests were not edited.
-- Complete local evaluations: seeds 0/1/2 each scored 100.00. No development key was configured, so these do not prove upstream model success. One neighbor message was dropped by the recipient policy; the day completed.
-- Added behavioral tests cover lit→unlit→unseen facts, an unknowable question, changed plans during pending requests, malformed output, synchronous/asynchronous failures, exhausted allowance, and daytime/night workplace requests. Successful model outputs in these tests are doubles.
-- Actual seed-1 platform questions produced uncertainty about an unseen bell and secret future events, and accepted a workplace request. The replay records 154 LLM units, establishing actual upstream use. An occupation question was answered unhelpfully; that prompted a broader job fallback, retention of the pending question on errors, punctuation-tolerant parsing, and removal of a very small completion cap. The original cause was not verified.
+- **132 project checks passed**, with seven Gymnasium casting warnings. Targeted tests cover requesting a tour, leaving, returning at the wrong and right times, a resident who never made the offer, night, a conversation pause, and a failed model request.
+- The three standard evaluation days scored 100.00 each. That score measures episode completion.
+- Three full scripted visitor days took the agent through an actual direct request, departure, and return. The same villager remembered the offer on all three seeds. The arrival line was observed on seeds 17 and 53. On seed 31, the villager remembered the offer but the probe did not observe arrival. No decision timed out. The observed chat and ticks are in `evidence/season6-visitor.json`.
+- Local runs used no model credentials. They establish scripted follow-through and fallback behavior. They do not test upstream response quality.
 
-Detailed messages, interrupted-session limits, and raw results are in `evidence/`. Completion scores do not measure conversation quality.
+## AI use and reflection
 
-## AI use
-
-This submission was developed with OpenAI Codex. Codex read the assignment and feedback, adapted Neighbor, wrote dialogue and request handling, retained navigation fixes, added behavioral tests, ran checks and seeded days, operated platform visitor tests, and drafted this README. The official template supplied the environment, routine framework, routing, and background LLM client. This account of validation does not claim the student personally operated those tests.
-
-The main lesson was to separate understanding a question from asserting a world fact. A model can interpret wording, while code checks the current state and refuses unsupported claims. The smaller conversation vocabulary is the cost of that choice; broader dialogue still needs work.
+OpenAI Codex read the brief and peer feedback, wrote the conversation and memory changes, adapted the visitor probe, ran the tests, and drafted this README. The course template supplies the environment and observation helpers. A complete day alone did not establish that a promise was kept. Testing a return visit separately showed the difference between remembering an offer and getting the visitor all the way to the workplace. Codex operated the local tests.

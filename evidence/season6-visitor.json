@@ -1,0 +1,126 @@
+[
+  {
+    "seed": 17,
+    "ticks": 1200,
+    "reason": "terminated",
+    "scores": {
+      "player_0": 100.0,
+      "player_1": 100.0,
+      "player_2": 100.0,
+      "player_3": 100.0,
+      "player_4": 100.0,
+      "player_5": 100.0,
+      "player_6": 100.0,
+      "player_7": 100.0,
+      "player_8": 100.0,
+      "player_9": 100.0,
+      "player_10": 100.0
+    },
+    "timeouts": 0,
+    "error": null,
+    "resident": "player_4",
+    "offer_tick": 522,
+    "left_tick": 527,
+    "return_tick": 863,
+    "resume_tick": 864,
+    "arrival_tick": 865,
+    "lines": [
+      {
+        "tick": 522,
+        "speaker": "player_4",
+        "text": "I'm on my midday break. Come back after lunch and I'll show you where I work."
+      },
+      {
+        "tick": 864,
+        "speaker": "player_4",
+        "text": "I promised to show you where I work. Follow me."
+      },
+      {
+        "tick": 865,
+        "speaker": "player_4",
+        "text": "Here we are. This is where I work."
+      }
+    ]
+  },
+  {
+    "seed": 31,
+    "ticks": 1200,
+    "reason": "terminated",
+    "scores": {
+      "player_0": 100.0,
+      "player_1": 100.0,
+      "player_2": 100.0,
+      "player_3": 100.0,
+      "player_4": 100.0,
+      "player_5": 100.0,
+      "player_6": 100.0,
+      "player_7": 100.0,
+      "player_8": 100.0,
+      "player_9": 100.0,
+      "player_10": 100.0
+    },
+    "timeouts": 0,
+    "error": null,
+    "resident": "player_7",
+    "offer_tick": 568,
+    "left_tick": 640,
+    "return_tick": 847,
+    "resume_tick": 848,
+    "arrival_tick": null,
+    "lines": [
+      {
+        "tick": 568,
+        "speaker": "player_7",
+        "text": "I'm on my midday break. Come back after lunch and I'll show you where I work."
+      },
+      {
+        "tick": 848,
+        "speaker": "player_7",
+        "text": "I promised to show you where I work. Follow me."
+      }
+    ]
+  },
+  {
+    "seed": 53,
+    "ticks": 1200,
+    "reason": "terminated",
+    "scores": {
+      "player_0": 100.0,
+      "player_1": 100.0,
+      "player_2": 100.0,
+      "player_3": 100.0,
+      "player_4": 100.0,
+      "player_5": 100.0,
+      "player_6": 100.0,
+      "player_7": 100.0,
+      "player_8": 100.0,
+      "player_9": 100.0,
+      "player_10": 100.0
+    },
+    "timeouts": 0,
+    "error": null,
+    "resident": "player_4",
+    "offer_tick": 522,
+    "left_tick": 527,
+    "return_tick": 909,
+    "resume_tick": 910,
+    "arrival_tick": 911,
+    "lines": [
+      {
+        "tick": 522,
+        "speaker": "player_4",
+        "text": "I'm on my midday break. Come back after lunch and I'll show you where I work."
+      },
+      {
+        "tick": 910,
+        "speaker": "player_4",
+        "text": "I promised to show you where I work. Follow me."
+      },
+      {
+        "tick": 911,
+        "speaker": "player_4",
+        "text": "Here we are. This is where I work."
+      }
+    ]
+  }
+]

@@ -142,3 +142,35 @@ class GroundedDialogue(Dialogue):
         # Useful deterministic answers remain available without credentials or quota.
         intent = self.fallback_intent(text)
         return self._line(speaker, self.response_for(intent))
+
+
+class VisitorDialogue(GroundedDialogue):
+    """Turn a request into a bounded tour or a promise for after the midday break."""
+
+    def __init__(self, persona):
+        super().__init__(persona)
+        self.workplace_available = False
+        self.defer_tour = False
+
+    def scripted_answer(self, speaker, text):
+        low = text.lower()
+        if people.is_visitor(speaker) and "show" in low and any(word in low for word in ("work", "job")):
+            if not self.workplace_available:
+                return "I don't have a workplace to show you right now."
+            if day.phase(self.latest) == "midday":
+                self.defer_tour = True
+                return "I'm on my midday break. Come back after lunch and I'll show you where I work."
+        return super().scripted_answer(speaker, text)
+
+    def response_for(self, intent):
+        if intent == "neighbors" and self.latest is not None:
+            names = [
+                PERSONAS[int(person["id"].split("_")[-1]) - 1].split(",")[0]
+                for person in people.seen(self.latest)
+                if people.is_npc(str(person["id"]))
+                and int(person["id"].split("_")[-1]) <= len(PERSONAS)
+            ]
+            if names:
+                return "I can see " + ", ".join(names[:4]) + " nearby."
+            return "I don't see any of my neighbors from here."
+        return super().response_for(intent)
